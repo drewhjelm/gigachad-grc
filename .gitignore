@@ -30,3 +30,39 @@ services/*/storage/
 
 # Screenshots (may contain PII)
 Screenshot*.png
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Log files
+*.log
+logs/
+
+# Database dumps
+*.sql
+*.dump
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Build artifacts (service-specific)
+services/*/dist/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/settings.json
+
+# OS files
+Thumbs.db
+Desktop.ini
