@@ -39,7 +39,7 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
     // Handle empty strings and NaN which can occur when enableImplicitConversion converts invalid input
     if (value === '' || (typeof value === 'number' && isNaN(value))) {
       const displayValue = value === '' ? 'empty string' : 'NaN';
-      this.logger.warn(`Invalid pagination limit provided: ${displayValue}. Using default: ${this.defaultLimit}`);
+      PaginationLimitPipe.logger.warn(`Invalid pagination limit provided: ${displayValue}. Using default: ${this.defaultLimit}`);
       return this.defaultLimit;
     }
 
@@ -91,7 +91,7 @@ export class PaginationPagePipe implements PipeTransform<string | number, number
     // Handle empty strings and NaN which can occur when enableImplicitConversion converts invalid input
     if (value === '' || (typeof value === 'number' && isNaN(value))) {
       const displayValue = value === '' ? 'empty string' : 'NaN';
-      this.logger.warn(`Invalid pagination page provided: ${displayValue}. Using default: ${this.defaultPage}`);
+      PaginationPagePipe.logger.warn(`Invalid pagination page provided: ${displayValue}. Using default: ${this.defaultPage}`);
       return this.defaultPage;
     }
 
