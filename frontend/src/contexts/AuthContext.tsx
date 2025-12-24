@@ -102,6 +102,18 @@ function safeDecodeJWT(token: string): JWTPayload | null {
     // Parse the JSON payload
     try {
       const parsed = JSON.parse(decoded);
+      
+      // Validate required JWT fields
+      if (!parsed.sub || typeof parsed.sub !== 'string') {
+        console.error('Invalid JWT token: Missing or invalid subject (sub) field');
+        return null;
+      }
+      
+      if (!parsed.exp || typeof parsed.exp !== 'number') {
+        console.error('Invalid JWT token: Missing or invalid expiration (exp) field');
+        return null;
+      }
+      
       return parsed as JWTPayload;
     } catch (jsonError) {
       console.error('Invalid JWT token: JSON parsing failed');
