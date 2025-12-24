@@ -11,6 +11,22 @@ interface User {
   organizationId: string;
 }
 
+interface JWTPayload {
+  sub?: string;  // Optional - may not be present in access tokens
+  sid?: string;  // Session ID - present in Keycloak tokens
+  exp: number;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  preferred_username?: string;
+  roles?: string[];
+  realm_access?: {
+    roles?: string[];
+  };
+  organization_id?: string;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -50,6 +66,73 @@ function getKeycloak(): Keycloak {
 function resetKeycloakState() {
   initPromise = null;
   initStarted = false;
+}
+
+/**
+ * Safely decode a JWT token with proper validation and error handling
+ * @param token - The JWT token string to decode
+ * @param options - Optional configuration for validation
+ * @returns The decoded payload object, or null if token is invalid
+ */
+function safeDecodeJWT(token: string, options: { requireSub?: boolean } = {}): JWTPayload | null {
+  const { requireSub = false } = options;
+  try {
+    // Validate token structure - JWT should have exactly 3 parts separated by dots
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.error('Invalid JWT token format');
+      return null;
+    }
+
+    // Get the payload (second part)
+    const payload = parts[1];
+    
+    // Validate base64 string before decoding
+    if (!payload || payload.length === 0) {
+      console.error('Invalid JWT token: Empty payload');
+      return null;
+    }
+
+    // Decode the base64 payload
+    // JWT uses URL-safe base64 encoding, convert to standard base64 first
+    let decoded: string;
+    try {
+      // Convert URL-safe base64 to standard base64
+      const standardBase64 = payload
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        // Pad with = if necessary
+        .padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+      decoded = atob(standardBase64);
+    } catch (base64Error) {
+      console.error('Invalid JWT token: Base64 decoding failed', base64Error);
+      return null;
+    }
+    
+    // Parse the JSON payload
+    try {
+      const parsed = JSON.parse(decoded);
+      
+      // Validate required JWT fields - sub is optional for access tokens
+      if (requireSub && (!parsed.sub || typeof parsed.sub !== 'string')) {
+        console.error('Invalid JWT token: Missing or invalid subject (sub) field');
+        return null;
+      }
+      
+      if (!parsed.exp || typeof parsed.exp !== 'number') {
+        console.error('Invalid JWT token: Missing or invalid expiration (exp) field');
+        return null;
+      }
+      
+      return parsed as JWTPayload;
+    } catch (jsonError) {
+      console.error('Invalid JWT token: JSON parsing failed');
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to decode JWT token:', error);
+    return null;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -141,9 +224,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedToken = secureStorage.get(STORAGE_KEYS.TOKEN);
       if (storedToken && storedToken !== 'dev-token-not-for-production') {
         console.log('📝 Found stored SSO token, attempting to restore session...');
-        try {
-          // Decode token to check if it's still valid
-          const payload = JSON.parse(atob(storedToken.split('.')[1]));
+        // Decode token to check if it's still valid
+        const payload = safeDecodeJWT(storedToken);
+        
+        if (payload) {
           const expiresAt = payload.exp * 1000;
           const now = Date.now();
           
@@ -171,8 +255,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('⚠️ Stored token expired, clearing...');
             secureStorage.clearAll();
           }
-        } catch (e) {
-          console.error('❌ Failed to restore SSO session:', e);
+        } else {
+          console.error('❌ Failed to decode stored token, clearing...');
           secureStorage.clearAll();
         }
       }
@@ -200,27 +284,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (hasAccessToken) {
         console.log('🎉 Found access_token in URL, processing implicit flow response...');
         const accessToken = hashParams.get('access_token');
+        const idToken = hashParams.get('id_token');
         
         if (accessToken) {
-          // Decode the token to get user info
-          try {
-            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+          // Use id_token for user identity (it has 'sub' field), access_token for API calls
+          // Keycloak access tokens may not include 'sub' field
+          const tokenForUserInfo = idToken || accessToken;
+          const payload = safeDecodeJWT(tokenForUserInfo, { requireSub: !!idToken });
+          
+          if (payload) {
             console.log('📋 Token payload:', payload);
             
             // Extract role - check top-level roles array first, then realm_access.roles
             const roles = payload.roles || payload.realm_access?.roles || [];
             const role = roles.includes('admin') ? 'admin' : (roles[0] || 'viewer');
             
+            // For user ID, prefer sub from id_token, fall back to sid (session id) or generate from email
+            const userId = payload.sub || payload.sid || `user-${payload.email || payload.preferred_username || 'unknown'}`;
+            
             const user: User = {
-              id: payload.sub,
+              id: userId,
               email: payload.email || '',
               name: payload.name || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || payload.preferred_username || '',
               role: role,
-              organizationId: 'default-org',
+              organizationId: payload.organization_id || 'default-org',
             };
             
             setUser(user);
-            setToken(accessToken);
+            setToken(accessToken);  // Always use access_token for API calls
             setIsAuthenticated(true);
             
             // Store in secure storage
@@ -238,8 +329,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               window.location.href = '/dashboard';
             }, 100);
             return;
-          } catch (e) {
-            console.error('❌ Failed to parse access token:', e);
+          } else {
+            console.error('❌ Failed to decode access token - invalid token format');
+            setIsLoading(false);
+            return;
           }
         }
       }
