@@ -545,7 +545,16 @@ export class DRTestsService {
       `;
       openFindingsCount = Number(openFindings[0]?.count || 0);
     } catch (e) {
-      this.logger.warn('Could not fetch open findings count: ' + e.message);
+      if (e instanceof Error) {
+        this.logger.error(
+          `Could not fetch open findings count: ${e.message}`,
+          e.stack,
+        );
+      } else {
+        this.logger.error(
+          `Could not fetch open findings count: ${JSON.stringify(e)}`,
+        );
+      }
     }
 
     return {
