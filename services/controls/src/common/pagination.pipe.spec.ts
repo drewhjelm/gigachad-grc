@@ -7,7 +7,8 @@ describe('PaginationLimitPipe', () => {
 
   beforeEach(() => {
     pipe = new PaginationLimitPipe();
-    loggerWarnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    // Spy on the static logger's warn method
+    loggerWarnSpy = jest.spyOn(PaginationLimitPipe['logger'], 'warn').mockImplementation();
   });
 
   afterEach(() => {
@@ -140,7 +141,8 @@ describe('PaginationPagePipe', () => {
 
   beforeEach(() => {
     pipe = new PaginationPagePipe();
-    loggerWarnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    // Spy on the static logger's warn method
+    loggerWarnSpy = jest.spyOn(PaginationPagePipe['logger'], 'warn').mockImplementation();
   });
 
   afterEach(() => {
