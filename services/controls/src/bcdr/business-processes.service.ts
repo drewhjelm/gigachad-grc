@@ -156,8 +156,24 @@ export class BusinessProcessesService {
       WHERE pa.process_id = $1
     `, id);
 
-    // Get linked risks (using empty array since bia_risks table may not exist)
-    const risks: any[] = [];
+    // Get linked risks (handle case where bia_risks table may not exist)
+    let risks: any[] = [];
+    try {
+      risks = await this.prisma.$queryRawUnsafe<any[]>(`
+        SELECT br.*
+        FROM bcdr.bia_risks br
+        WHERE br.process_id = $1
+      `, id);
+    } catch (error: any) {
+      // PostgreSQL undefined_table error code is 42P01
+      if (error?.code === '42P01') {
+        const logger = new Logger(BusinessProcessesService.name);
+        logger.warn('bia_risks table not found; returning empty risks array for process ' + id);
+        risks = [];
+      } else {
+        throw error;
+      }
+    }
 
     return {
       ...process[0],
