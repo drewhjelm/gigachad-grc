@@ -1,4 +1,4 @@
-import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException } from '@nestjs/common';
+import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException, Logger } from '@nestjs/common';
 
 /**
  * Maximum allowed limit for any pagination request.
@@ -19,6 +19,7 @@ export const DEFAULT_PAGINATION_LIMIT = 25;
  */
 @Injectable()
 export class PaginationLimitPipe implements PipeTransform<string | number, number> {
+  private readonly logger = new Logger(PaginationLimitPipe.name);
   private readonly defaultLimit: number;
   private readonly maxLimit: number;
   private readonly minLimit: number;
@@ -41,16 +42,19 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
 
     // Validate it's a valid number
     if (isNaN(limit)) {
+      this.logger.warn(`Invalid limit value provided: "${value}". Falling back to default: ${this.defaultLimit}`);
       return this.defaultLimit; // Return default instead of throwing for better UX
     }
 
     // Enforce minimum
     if (limit < this.minLimit) {
+      this.logger.warn(`Limit value ${limit} is below minimum ${this.minLimit}. Clamping to minimum.`);
       return this.minLimit;
     }
 
     // Enforce maximum
     if (limit > this.maxLimit) {
+      this.logger.warn(`Limit value ${limit} exceeds maximum ${this.maxLimit}. Clamping to maximum.`);
       return this.maxLimit;
     }
 
@@ -63,6 +67,7 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
  */
 @Injectable()
 export class PaginationPagePipe implements PipeTransform<string | number, number> {
+  private readonly logger = new Logger(PaginationPagePipe.name);
   private readonly defaultPage: number;
   private readonly minPage: number;
 
@@ -83,11 +88,13 @@ export class PaginationPagePipe implements PipeTransform<string | number, number
 
     // Validate it's a valid number
     if (isNaN(page)) {
+      this.logger.warn(`Invalid page value provided: "${value}". Falling back to default: ${this.defaultPage}`);
       return this.defaultPage; // Return default instead of throwing for better UX
     }
 
     // Enforce minimum
     if (page < this.minPage) {
+      this.logger.warn(`Page value ${page} is below minimum ${this.minPage}. Clamping to minimum.`);
       return this.minPage;
     }
 
