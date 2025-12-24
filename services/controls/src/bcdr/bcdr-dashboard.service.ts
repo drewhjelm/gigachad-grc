@@ -103,7 +103,12 @@ export class BCDRDashboardService {
         LIMIT 10
       `;
     } catch (e) {
-      this.logger.warn('Could not fetch overdue findings: ' + e.message);
+      const errorMessage = 'Could not fetch overdue findings for organization ' + organizationId;
+      if (e instanceof Error) {
+        this.logger.error(errorMessage + ': ' + e.message, e.stack);
+      } else {
+        this.logger.error(errorMessage + ': ' + JSON.stringify(e));
+      }
       overdueFindings = [];
     }
 
