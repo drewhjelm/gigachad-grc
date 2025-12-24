@@ -11,6 +11,21 @@ interface User {
   organizationId: string;
 }
 
+interface JWTPayload {
+  sub: string;
+  exp: number;
+  email?: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  preferred_username?: string;
+  roles?: string[];
+  realm_access?: {
+    roles?: string[];
+  };
+  organization_id?: string;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -57,12 +72,12 @@ function resetKeycloakState() {
  * @param token - The JWT token string to decode
  * @returns The decoded payload object, or null if token is invalid
  */
-function safeDecodeJWT(token: string): any | null {
+function safeDecodeJWT(token: string): JWTPayload | null {
   try {
     // Validate token structure - JWT should have exactly 3 parts separated by dots
     const parts = token.split('.');
     if (parts.length !== 3) {
-      console.error('Invalid JWT token: Expected 3 parts, got', parts.length);
+      console.error('Invalid JWT token format');
       return null;
     }
 
@@ -76,12 +91,22 @@ function safeDecodeJWT(token: string): any | null {
     }
 
     // Decode the base64 payload
-    const decoded = atob(payload);
+    let decoded: string;
+    try {
+      decoded = atob(payload);
+    } catch (base64Error) {
+      console.error('Invalid JWT token: Base64 decoding failed');
+      return null;
+    }
     
     // Parse the JSON payload
-    const parsed = JSON.parse(decoded);
-    
-    return parsed;
+    try {
+      const parsed = JSON.parse(decoded);
+      return parsed as JWTPayload;
+    } catch (jsonError) {
+      console.error('Invalid JWT token: JSON parsing failed');
+      return null;
+    }
   } catch (error) {
     console.error('Failed to decode JWT token:', error);
     return null;
