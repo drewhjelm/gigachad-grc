@@ -12,7 +12,8 @@ interface User {
 }
 
 interface JWTPayload {
-  sub: string;
+  sub?: string;  // Optional - may not be present in access tokens
+  sid?: string;  // Session ID - present in Keycloak tokens
   exp: number;
   email?: string;
   name?: string;
@@ -70,9 +71,11 @@ function resetKeycloakState() {
 /**
  * Safely decode a JWT token with proper validation and error handling
  * @param token - The JWT token string to decode
+ * @param options - Optional configuration for validation
  * @returns The decoded payload object, or null if token is invalid
  */
-function safeDecodeJWT(token: string): JWTPayload | null {
+function safeDecodeJWT(token: string, options: { requireSub?: boolean } = {}): JWTPayload | null {
+  const { requireSub = false } = options;
   try {
     // Validate token structure - JWT should have exactly 3 parts separated by dots
     const parts = token.split('.');
@@ -91,11 +94,18 @@ function safeDecodeJWT(token: string): JWTPayload | null {
     }
 
     // Decode the base64 payload
+    // JWT uses URL-safe base64 encoding, convert to standard base64 first
     let decoded: string;
     try {
-      decoded = atob(payload);
+      // Convert URL-safe base64 to standard base64
+      const standardBase64 = payload
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        // Pad with = if necessary
+        .padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+      decoded = atob(standardBase64);
     } catch (base64Error) {
-      console.error('Invalid JWT token: Base64 decoding failed');
+      console.error('Invalid JWT token: Base64 decoding failed', base64Error);
       return null;
     }
     
@@ -103,8 +113,8 @@ function safeDecodeJWT(token: string): JWTPayload | null {
     try {
       const parsed = JSON.parse(decoded);
       
-      // Validate required JWT fields
-      if (!parsed.sub || typeof parsed.sub !== 'string') {
+      // Validate required JWT fields - sub is optional for access tokens
+      if (requireSub && (!parsed.sub || typeof parsed.sub !== 'string')) {
         console.error('Invalid JWT token: Missing or invalid subject (sub) field');
         return null;
       }
@@ -274,10 +284,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (hasAccessToken) {
         console.log('🎉 Found access_token in URL, processing implicit flow response...');
         const accessToken = hashParams.get('access_token');
+        const idToken = hashParams.get('id_token');
         
         if (accessToken) {
-          // Decode the token to get user info
-          const payload = safeDecodeJWT(accessToken);
+          // Use id_token for user identity (it has 'sub' field), access_token for API calls
+          // Keycloak access tokens may not include 'sub' field
+          const tokenForUserInfo = idToken || accessToken;
+          const payload = safeDecodeJWT(tokenForUserInfo, { requireSub: !!idToken });
           
           if (payload) {
             console.log('📋 Token payload:', payload);
@@ -286,16 +299,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const roles = payload.roles || payload.realm_access?.roles || [];
             const role = roles.includes('admin') ? 'admin' : (roles[0] || 'viewer');
             
+            // For user ID, prefer sub from id_token, fall back to sid (session id) or generate from email
+            const userId = payload.sub || payload.sid || `user-${payload.email || payload.preferred_username || 'unknown'}`;
+            
             const user: User = {
-              id: payload.sub,
+              id: userId,
               email: payload.email || '',
               name: payload.name || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || payload.preferred_username || '',
               role: role,
-              organizationId: 'default-org',
+              organizationId: payload.organization_id || 'default-org',
             };
             
             setUser(user);
-            setToken(accessToken);
+            setToken(accessToken);  // Always use access_token for API calls
             setIsAuthenticated(true);
             
             // Store in secure storage
