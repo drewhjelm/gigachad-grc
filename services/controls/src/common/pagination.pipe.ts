@@ -1,4 +1,4 @@
-import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException } from '@nestjs/common';
+import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException, Logger } from '@nestjs/common';
 
 /**
  * Maximum allowed limit for any pagination request.
@@ -19,6 +19,7 @@ export const DEFAULT_PAGINATION_LIMIT = 25;
  */
 @Injectable()
 export class PaginationLimitPipe implements PipeTransform<string | number, number> {
+  private readonly logger = new Logger(PaginationLimitPipe.name);
   private readonly defaultLimit: number;
   private readonly maxLimit: number;
   private readonly minLimit: number;
@@ -33,6 +34,9 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
     // If no value provided, use default
     // Also handle NaN which can occur when enableImplicitConversion converts empty strings
     if (value === undefined || value === null || value === '' || (typeof value === 'number' && isNaN(value))) {
+      if (value !== undefined && value !== null) {
+        this.logger.warn(`Invalid pagination limit provided: "${value}". Using default: ${this.defaultLimit}`);
+      }
       return this.defaultLimit;
     }
 
@@ -41,16 +45,19 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
 
     // Validate it's a valid number
     if (isNaN(limit)) {
+      this.logger.warn(`Invalid pagination limit provided: "${value}". Using default: ${this.defaultLimit}`);
       return this.defaultLimit; // Return default instead of throwing for better UX
     }
 
     // Enforce minimum
     if (limit < this.minLimit) {
+      this.logger.warn(`Pagination limit ${limit} below minimum ${this.minLimit}. Using minimum: ${this.minLimit}`);
       return this.minLimit;
     }
 
     // Enforce maximum
     if (limit > this.maxLimit) {
+      this.logger.warn(`Pagination limit ${limit} exceeds maximum ${this.maxLimit}. Using maximum: ${this.maxLimit}`);
       return this.maxLimit;
     }
 
@@ -63,6 +70,7 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
  */
 @Injectable()
 export class PaginationPagePipe implements PipeTransform<string | number, number> {
+  private readonly logger = new Logger(PaginationPagePipe.name);
   private readonly defaultPage: number;
   private readonly minPage: number;
 
@@ -75,6 +83,9 @@ export class PaginationPagePipe implements PipeTransform<string | number, number
     // If no value provided, use default
     // Also handle NaN which can occur when enableImplicitConversion converts empty strings
     if (value === undefined || value === null || value === '' || (typeof value === 'number' && isNaN(value))) {
+      if (value !== undefined && value !== null) {
+        this.logger.warn(`Invalid pagination page provided: "${value}". Using default: ${this.defaultPage}`);
+      }
       return this.defaultPage;
     }
 
@@ -83,11 +94,13 @@ export class PaginationPagePipe implements PipeTransform<string | number, number
 
     // Validate it's a valid number
     if (isNaN(page)) {
+      this.logger.warn(`Invalid pagination page provided: "${value}". Using default: ${this.defaultPage}`);
       return this.defaultPage; // Return default instead of throwing for better UX
     }
 
     // Enforce minimum
     if (page < this.minPage) {
+      this.logger.warn(`Pagination page ${page} below minimum ${this.minPage}. Using minimum: ${this.minPage}`);
       return this.minPage;
     }
 
