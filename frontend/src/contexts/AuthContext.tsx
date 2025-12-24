@@ -52,6 +52,42 @@ function resetKeycloakState() {
   initStarted = false;
 }
 
+/**
+ * Safely decode a JWT token with proper validation and error handling
+ * @param token - The JWT token string to decode
+ * @returns The decoded payload object, or null if token is invalid
+ */
+function safeDecodeJWT(token: string): any | null {
+  try {
+    // Validate token structure - JWT should have exactly 3 parts separated by dots
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.error('Invalid JWT token: Expected 3 parts, got', parts.length);
+      return null;
+    }
+
+    // Get the payload (second part)
+    const payload = parts[1];
+    
+    // Validate base64 string before decoding
+    if (!payload || payload.length === 0) {
+      console.error('Invalid JWT token: Empty payload');
+      return null;
+    }
+
+    // Decode the base64 payload
+    const decoded = atob(payload);
+    
+    // Parse the JSON payload
+    const parsed = JSON.parse(decoded);
+    
+    return parsed;
+  } catch (error) {
+    console.error('Failed to decode JWT token:', error);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,9 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedToken = secureStorage.get(STORAGE_KEYS.TOKEN);
       if (storedToken && storedToken !== 'dev-token-not-for-production') {
         console.log('📝 Found stored SSO token, attempting to restore session...');
-        try {
-          // Decode token to check if it's still valid
-          const payload = JSON.parse(atob(storedToken.split('.')[1]));
+        // Decode token to check if it's still valid
+        const payload = safeDecodeJWT(storedToken);
+        
+        if (payload) {
           const expiresAt = payload.exp * 1000;
           const now = Date.now();
           
@@ -171,8 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('⚠️ Stored token expired, clearing...');
             secureStorage.clearAll();
           }
-        } catch (e) {
-          console.error('❌ Failed to restore SSO session:', e);
+        } else {
+          console.error('❌ Failed to decode stored token, clearing...');
           secureStorage.clearAll();
         }
       }
@@ -203,8 +240,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (accessToken) {
           // Decode the token to get user info
-          try {
-            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+          const payload = safeDecodeJWT(accessToken);
+          
+          if (payload) {
             console.log('📋 Token payload:', payload);
             
             // Extract role - check top-level roles array first, then realm_access.roles
@@ -238,8 +276,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               window.location.href = '/dashboard';
             }, 100);
             return;
-          } catch (e) {
-            console.error('❌ Failed to parse access token:', e);
+          } else {
+            console.error('❌ Failed to decode access token - invalid token format');
+            setIsLoading(false);
+            return;
           }
         }
       }
