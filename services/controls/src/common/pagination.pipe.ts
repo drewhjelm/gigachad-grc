@@ -32,11 +32,13 @@ export class PaginationLimitPipe implements PipeTransform<string | number, numbe
 
   transform(value: string | number | undefined, _metadata: ArgumentMetadata): number {
     // If no value provided, use default
-    // Also handle NaN which can occur when enableImplicitConversion converts empty strings
-    if (value === undefined || value === null || value === '' || (typeof value === 'number' && isNaN(value))) {
-      if (value !== undefined && value !== null) {
-        this.logger.warn(`Invalid pagination limit provided: "${value}". Using default: ${this.defaultLimit}`);
-      }
+    if (value === undefined || value === null) {
+      return this.defaultLimit;
+    }
+
+    // Handle empty strings and NaN which can occur when enableImplicitConversion converts invalid input
+    if (value === '' || (typeof value === 'number' && isNaN(value))) {
+      this.logger.warn(`Invalid pagination limit provided: "${value}". Using default: ${this.defaultLimit}`);
       return this.defaultLimit;
     }
 
@@ -81,11 +83,13 @@ export class PaginationPagePipe implements PipeTransform<string | number, number
 
   transform(value: string | number | undefined, _metadata: ArgumentMetadata): number {
     // If no value provided, use default
-    // Also handle NaN which can occur when enableImplicitConversion converts empty strings
-    if (value === undefined || value === null || value === '' || (typeof value === 'number' && isNaN(value))) {
-      if (value !== undefined && value !== null) {
-        this.logger.warn(`Invalid pagination page provided: "${value}". Using default: ${this.defaultPage}`);
-      }
+    if (value === undefined || value === null) {
+      return this.defaultPage;
+    }
+
+    // Handle empty strings and NaN which can occur when enableImplicitConversion converts invalid input
+    if (value === '' || (typeof value === 'number' && isNaN(value))) {
+      this.logger.warn(`Invalid pagination page provided: "${value}". Using default: ${this.defaultPage}`);
       return this.defaultPage;
     }
 
