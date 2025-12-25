@@ -14,7 +14,7 @@ services:
       - "--log.level=INFO"
     ports:
       - "80:80"
-      - "443:443"
+      - "${TRAEFIK_HTTPS_PORT:-443}:443"
       - "8090:8080"  # Traefik dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -112,8 +112,8 @@ services:
       RUSTFS_ROOT_USER: ${MINIO_ROOT_USER:-rustfsadmin}
       RUSTFS_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-rustfsadmin}
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console
+      - "${RUSTFS_S3_PORT:-9000}:9000"   # S3 API
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"   # Console
     volumes:
       - rustfs_data:/data
       - rustfs_logs:/logs
