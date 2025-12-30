@@ -1,5 +1,15 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import Keycloak from 'keycloak-js';
+// Ensure a safe global exists for interactive debugging in browsers
+try {
+  // @ts-ignore
+  if (typeof window !== 'undefined' && !(window as any).kc) {
+    // @ts-ignore
+    window.kc = null;
+  }
+} catch (e) {
+  // ignore in restricted environments
+}
 import { setErrorTrackingUser, addBreadcrumb } from '@/lib/errorTracking';
 import { secureStorage, STORAGE_KEYS } from '@/lib/secureStorage';
 
@@ -58,6 +68,14 @@ let initStarted = false;
 function getKeycloak(): Keycloak {
   if (!keycloak) {
     keycloak = new Keycloak(keycloakConfig);
+    // Expose Keycloak instance for interactive debugging in the browser console
+    try {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      window.kc = keycloak;
+    } catch (e) {
+      // ignore in restricted environments
+    }
   }
   return keycloak;
 }
@@ -281,61 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // If we have an access_token in the hash (implicit flow), parse it directly
-      if (hasAccessToken) {
-        console.log('🎉 Found access_token in URL, processing implicit flow response...');
-        const accessToken = hashParams.get('access_token');
-        const idToken = hashParams.get('id_token');
-        
-        if (accessToken) {
-          // Use id_token for user identity (it has 'sub' field), access_token for API calls
-          // Keycloak access tokens may not include 'sub' field
-          const tokenForUserInfo = idToken || accessToken;
-          const payload = safeDecodeJWT(tokenForUserInfo, { requireSub: !!idToken });
-          
-          if (payload) {
-            console.log('📋 Token payload:', payload);
-            
-            // Extract role - check top-level roles array first, then realm_access.roles
-            const roles = payload.roles || payload.realm_access?.roles || [];
-            const role = roles.includes('admin') ? 'admin' : (roles[0] || 'viewer');
-            
-            // For user ID, prefer sub from id_token, fall back to sid (session id) or generate from email
-            const userId = payload.sub || payload.sid || `user-${payload.email || payload.preferred_username || 'unknown'}`;
-            
-            const user: User = {
-              id: userId,
-              email: payload.email || '',
-              name: payload.name || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || payload.preferred_username || '',
-              role: role,
-              organizationId: payload.organization_id || 'default-org',
-            };
-            
-            setUser(user);
-            setToken(accessToken);  // Always use access_token for API calls
-            setIsAuthenticated(true);
-            
-            // Store in secure storage
-            secureStorage.set(STORAGE_KEYS.USER_ID, user.id);
-            secureStorage.set(STORAGE_KEYS.ORGANIZATION_ID, user.organizationId);
-            secureStorage.set(STORAGE_KEYS.TOKEN, accessToken);
-            
-            // Clean up URL and navigate to dashboard
-            // Use window.location.href to trigger full navigation since we're outside React Router
-            console.log('✅ Implicit flow login successful! Redirecting to dashboard...');
-            setIsLoading(false);
-            
-            // Small delay to ensure state updates propagate before navigation
-            setTimeout(() => {
-              window.location.href = '/dashboard';
-            }, 100);
-            return;
-          } else {
-            console.error('❌ Failed to decode access token - invalid token format');
-            setIsLoading(false);
-            return;
-          }
-        }
-      }
+      // (PKCE/standard flow only) -- implicit flow handling removed
       
       // Determine if we have an auth callback (code in query OR state in hash from keycloak-js)
       const hasAuthCallback = hasCode || hasState;
@@ -358,7 +322,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           await kc.init({
             checkLoginIframe: false,
-            flow: 'implicit', // Use implicit flow to avoid PKCE sessionStorage issues
+            flow: 'standard', // Use authorization code flow with PKCE
+            pkceMethod: 'S256', // Explicitly set PKCE method
           });
           console.log('✅ Keycloak ready for login');
         } catch (e) {
@@ -394,7 +359,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Initialize Keycloak to process the token from URL fragment
         initPromise = kc.init({
           checkLoginIframe: false,
-          flow: 'implicit', // Use implicit flow to avoid PKCE sessionStorage issues
+          flow: 'standard', // Use authorization code flow with PKCE
+          pkceMethod: 'S256', // Explicitly set PKCE method
         });
 
         const authenticated = await initPromise;
@@ -440,7 +406,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       } catch (error) {
         clearTimeout(timeoutId);
-        console.error('Keycloak initialization failed:', error);
+        // Improved error logging for debugging
+        if (error instanceof Error) {
+          console.error('Keycloak initialization failed:', error, error.stack);
+        } else {
+          try {
+            console.error('Keycloak initialization failed:', error, JSON.stringify(error));
+          } catch (jsonErr) {
+            console.error('Keycloak initialization failed:', error);
+          }
+        }
         resetKeycloakState();
       } finally {
         setIsLoading(false);
@@ -455,9 +430,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const kc = getKeycloak();
     console.log('🔐 Login clicked, Keycloak instance:', kc);
     console.log('🔐 Redirecting to Keycloak...');
-    // Redirect back to root so Keycloak can process the callback
+    // Use kc.login so keycloak-js can generate and store PKCE verifier in sessionStorage
+    // Use form_post response mode to avoid fragment-based callbacks
     kc.login({
       redirectUri: window.location.origin + '/',
+      responseMode: 'form_post',
     });
   }, []);
 
